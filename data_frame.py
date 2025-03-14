@@ -1,18 +1,18 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-import pandas as pd
-
+IGNORED_COLUMNS = [
+    "Cipher Suite", "TLS Fingerprint", "TLS Distinction Score",
+    "ECH Packet Sizes", "ECH IPT", "PacketLossRate", "FlowDuration"
+]
 
 class DataFrame:
     def __init__(self, master, dataframe):
-        self.master = master  # Parent window (from gui.py)
+        self.master = master
         self.dataframe = dataframe
         self.window = tk.Toplevel(master)
         self.window.title("Comparison Table")
-        self.window.geometry("1200x600")  # Adjust as needed
+        self.window.geometry("1200x600")
         self.sort_orders = {col: True for col in self.dataframe.columns}
-
-        # Updated tooltip dictionary including missing columns
         self.header_tooltips = {
             "PcapFile": "Name of the pcap file",
             "AvgPktSize": "Average size of packets in the flow (value: bytes)",  # ✅ Fixed
@@ -30,34 +30,36 @@ class DataFrame:
 
         }
 
+        # Exclude ignored columns from the Treeview, but keep them in the dataframe
+        display_columns = [col for col in self.dataframe.columns if col not in IGNORED_COLUMNS]
+
         # Create a frame to hold the Treeview and scrollbars
         frame = tk.Frame(self.window)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        # Create vertical and horizontal scrollbars
         vsb = ttk.Scrollbar(frame, orient="vertical")
         hsb = ttk.Scrollbar(frame, orient="horizontal")
         vsb.pack(side="right", fill="y")
         hsb.pack(side="bottom", fill="x")
 
-        # Create the Treeview widget
-        self.tree = ttk.Treeview(frame, columns=list(self.dataframe.columns), show="headings",
+        # Create the Treeview widget with filtered columns
+        self.tree = ttk.Treeview(frame, columns=display_columns, show="headings",
                                  yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         vsb.config(command=self.tree.yview)
         hsb.config(command=self.tree.xview)
         self.tree.pack(fill=tk.BOTH, expand=True)
 
-        # Set column widths manually (using your original logic)
-        scaling_factor = 6.0  # Character count to pixel width (adjust as needed)
-        min_width = 100  # Minimum column width for readability
+        # Set column widths, skipping ignored columns
+        scaling_factor = 6.0
+        min_width = 100
 
-        for col in self.dataframe.columns:
+        for col in display_columns:
             header_length = len(str(col))
             cell_lengths = self.dataframe[col].astype(str).apply(len)
             max_cell_length = cell_lengths.max() if not cell_lengths.empty else 0
             max_length = max(header_length, max_cell_length)
             col_width = max(max_length * scaling_factor, min_width)
-            self.tree.column(col, width=int(col_width), anchor="w", stretch=False)  # Left-align text
+            self.tree.column(col, width=int(col_width), anchor="w", stretch=False)
             self.tree.heading(col, text=col, anchor="w", command=lambda _col=col: self.sort_column(_col))
 
         self.populate_table()
@@ -109,17 +111,19 @@ class DataFrame:
     def populate_table(self):
         """Populate the Treeview with DataFrame data."""
         for item in self.tree.get_children():
-            self.tree.delete(item)
+            self.tree.delete(item)  # Clear existing rows
+
         for _, row in self.dataframe.iterrows():
             values = []
-            for col in self.dataframe.columns:
+            for col in self.tree["columns"]:  # Use only displayed columns
                 try:
-                    num = float(row[col])
-                    val = f"{num:.3f}"
-                except (ValueError, TypeError):
-                    val = str(row[col])
+                    val = str(row[col])  # Keep the original value as processed
+
+                except KeyError:
+                    val = "N/A"  # Handle missing columns gracefully
                 values.append(val)
-            self.tree.insert("", "end", values=values)
+
+            self.tree.insert("", "end", values=values)  # Ensure correct column alignment
 
     def update_table(self):
         """Update the DataFrame and re-populate the table."""
