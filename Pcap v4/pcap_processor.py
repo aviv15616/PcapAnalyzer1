@@ -2,18 +2,41 @@ import pyshark
 from collections import Counter
 import os
 import asyncio
+import tkinter as tk
+from tkinter import messagebox
 
 
 class PcapProcessor:
-    def __init__(self):
+    def __init__(self, sample_mode=False):  # Add a sample mode flag
+
         self.pcap_data = []
+        self.processed_files = set()  # Track uploaded file names
+        self.sample_mode = sample_mode  # Enable/Disable sampling
+
 
     def process_pcap(self, file_path):
+        file_name = os.path.basename(file_path)
+        sample_limit = 1000 if self.sample_mode else None  # Only process 1000 packets if sampling is enabled
+
+        # Ensure no duplicate file uploads
+        if file_name in self.processed_files:
+            self.show_message("Error: PCAP file with the same name already loaded.")
+            return False
+
+        # Ensure only up to 10 files can be processed
+        if len(self.pcap_data) >= 10:
+            return False
+
+        self.processed_files.add(file_name)
+
         # Ensure the thread has an event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        cap = pyshark.FileCapture(file_path, use_json=True)
+        try:
+            cap = pyshark.FileCapture(file_path, use_json=True)
+        except Exception:
+            return False
 
         packet_count = 0
         total_size = 0
@@ -23,10 +46,9 @@ class PcapProcessor:
         tcp_flags = Counter()
         ip_protocols = Counter()
 
-        # Separate capture to count HTTP versions
-        http_cap = pyshark.FileCapture(file_path, use_json=True, display_filter="http || http2 || http3")
-
         for packet in cap:
+            if self.sample_mode and packet_count >= sample_limit:
+                break
             packet_count += 1
             total_size += int(packet.length)
 
@@ -47,8 +69,7 @@ class PcapProcessor:
             if hasattr(packet, 'ip') and hasattr(packet.ip, 'proto'):
                 ip_protocols[packet.ip.proto] += 1
 
-        # Count HTTP versions separately
-        for packet in http_cap:
+            # HTTP Counting within the same capture
             if hasattr(packet, 'http'):
                 http_counter['HTTP1'] += 1
             if hasattr(packet, 'http2'):
@@ -57,14 +78,13 @@ class PcapProcessor:
                 http_counter['HTTP3'] += 1
 
         cap.close()
-        http_cap.close()
 
         duration = (end_time - start_time) if start_time and end_time else 0
         avg_packet_size = total_size / packet_count if packet_count else 0
         avg_packet_iat = duration / packet_count if packet_count else 0
 
         self.pcap_data.append({
-            "Pcap file": os.path.basename(file_path),
+            "Pcap file": file_name,
             "Flow size": packet_count,
             "Flow Volume (bytes)": total_size,
             "Flow duration (seconds)": round(duration, 2),
@@ -74,3 +94,10 @@ class PcapProcessor:
             "Tcp Flags": " ".join([f"{k}-{v}" for k, v in tcp_flags.items()]) or "N/A",
             "Ip protocols": " ".join([f"{k}-{v}" for k, v in ip_protocols.items()]) or "N/A",
         })
+
+        return True
+
+    def show_message(self, message):
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo("Notification", message)
