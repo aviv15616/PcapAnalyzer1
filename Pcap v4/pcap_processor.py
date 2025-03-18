@@ -13,23 +13,19 @@ class PcapProcessor:
         self.processed_files = set()  # Track uploaded file names
         self.sample_mode = sample_mode  # Enable/Disable sampling
 
-
     def process_pcap(self, file_path):
         file_name = os.path.basename(file_path)
-        sample_limit = 1000 if self.sample_mode else None  # Only process 1000 packets if sampling is enabled
+        sample_limit = 1000 if self.sample_mode else None  # Limit to 1000 packets if sampling enabled
 
-        # Ensure no duplicate file uploads
+        # Prevent duplicate file uploads
         if file_name in self.processed_files:
             self.show_message("Error: PCAP file with the same name already loaded.")
             return False
 
-        # Ensure only up to 10 files can be processed
         if len(self.pcap_data) >= 10:
-            return False
+            return False  # Limit total PCAPs
 
         self.processed_files.add(file_name)
-
-        # Ensure the thread has an event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -45,6 +41,10 @@ class PcapProcessor:
         http_counter = Counter()
         tcp_flags = Counter()
         ip_protocols = Counter()
+        iat_list = []  # Store all IAT values
+        timestamps_list = []  # Store all packet timestamps
+
+        prev_time = None
 
         for packet in cap:
             if self.sample_mode and packet_count >= sample_limit:
@@ -52,9 +52,18 @@ class PcapProcessor:
             packet_count += 1
             total_size += int(packet.length)
 
+            # Track first and last packet time
+            current_time = float(packet.sniff_time.timestamp())
+            timestamps_list.append(current_time)  # Store the timestamp
+
             if start_time is None:
-                start_time = float(packet.sniff_time.timestamp())
-            end_time = float(packet.sniff_time.timestamp())
+                start_time = current_time
+            end_time = current_time
+
+            # Calculate Inter-Packet Arrival Time (IAT)
+            if prev_time is not None:
+                iat_list.append(current_time - prev_time)
+            prev_time = current_time
 
             # TCP Flags Counting
             if hasattr(packet, 'tcp') and hasattr(packet.tcp, 'flags'):
@@ -69,7 +78,7 @@ class PcapProcessor:
             if hasattr(packet, 'ip') and hasattr(packet.ip, 'proto'):
                 ip_protocols[packet.ip.proto] += 1
 
-            # HTTP Counting within the same capture
+            # HTTP Counting
             if hasattr(packet, 'http'):
                 http_counter['HTTP1'] += 1
             if hasattr(packet, 'http2'):
@@ -90,6 +99,8 @@ class PcapProcessor:
             "Flow duration (seconds)": round(duration, 2),
             "Avg Packet size (bytes)": round(avg_packet_size, 2),
             "Avg Packet IAT (seconds)": round(avg_packet_iat, 6),
+            "Inter-Packet Arrival Times": iat_list,  # Store full list
+            "Packet Timestamps": timestamps_list,  # Store all timestamps
             "Http Count": " ".join([f"{k}-{v}" for k, v in http_counter.items()]) or "0",
             "Tcp Flags": " ".join([f"{k}-{v}" for k, v in tcp_flags.items()]) or "N/A",
             "Ip protocols": " ".join([f"{k}-{v}" for k, v in ip_protocols.items()]) or "N/A",
