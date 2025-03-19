@@ -2,27 +2,27 @@ import pyshark
 from collections import Counter
 import os
 import asyncio
+import numpy as np
 import tkinter as tk
 from tkinter import messagebox
 
 
 class PcapProcessor:
-    def __init__(self, sample_mode=False):  # Add a sample mode flag
+    def __init__(self, sample_mode=False):
         self.pcap_data = []
-        self.processed_files = set()  # Track uploaded file names
-        self.sample_mode = sample_mode  # Enable/Disable sampling
+        self.processed_files = set()
+        self.sample_mode = sample_mode
 
     def process_pcap(self, file_path):
         file_name = os.path.basename(file_path)
-        sample_limit = 1000 if self.sample_mode else None  # Limit to 1000 packets if sampling enabled
+        sample_limit = 1000 if self.sample_mode else None
 
-        # Prevent duplicate file uploads
         if file_name in self.processed_files:
             self.show_message("Error: PCAP file with the same name already loaded.")
             return False
 
         if len(self.pcap_data) >= 10:
-            return False  # Limit total PCAPs
+            return False
 
         self.processed_files.add(file_name)
         loop = asyncio.new_event_loop()
@@ -40,10 +40,10 @@ class PcapProcessor:
         http_counter = Counter()
         tcp_flags = Counter()
         ip_protocols = Counter()
-        iat_list = []  # Store all IAT values
-        timestamps_list = []  # Store all packet timestamps
-        packet_sizes = []  # ✅ Store all packet sizes
-        flows = {}  # Store forward and backward packet counts per flow
+        iat_list = []
+        timestamps_list = []
+        packet_sizes = []
+        flows = {}
 
         prev_time = None
 
@@ -54,23 +54,19 @@ class PcapProcessor:
             packet_length = int(packet.length)
             total_size += packet_length
 
-            # ✅ Store packet sizes for distribution analysis
             packet_sizes.append(packet_length)
 
-            # Track first and last packet time
             current_time = float(packet.sniff_time.timestamp())
-            timestamps_list.append(current_time)  # Store the timestamp
+            timestamps_list.append(current_time)
 
             if start_time is None:
                 start_time = current_time
             end_time = current_time
 
-            # Calculate Inter-Packet Arrival Time (IAT)
             if prev_time is not None:
                 iat_list.append(current_time - prev_time)
             prev_time = current_time
 
-            # Extract flow direction (based on source-destination pair)
             if hasattr(packet, 'ip') and hasattr(packet, 'tcp'):
                 src_ip = packet.ip.src
                 dst_ip = packet.ip.dst
@@ -84,7 +80,7 @@ class PcapProcessor:
                 dst_port = packet.udp.dstport
                 proto = "UDP"
             else:
-                continue  # Skip non-IP packets
+                continue
 
             flow_key = (src_ip, dst_ip, src_port, dst_port, proto)
             reverse_flow_key = (dst_ip, src_ip, dst_port, src_port, proto)
@@ -97,7 +93,6 @@ class PcapProcessor:
             elif reverse_flow_key in flows:
                 flows[reverse_flow_key]["backward"] += 1
 
-            # TCP Flags Counting
             if hasattr(packet, 'tcp') and hasattr(packet.tcp, 'flags'):
                 flags = int(packet.tcp.flags, 16)
                 if flags & 0x02: tcp_flags['SYN'] += 1
@@ -106,11 +101,9 @@ class PcapProcessor:
                 if flags & 0x08: tcp_flags['PSH'] += 1
                 if flags & 0x01: tcp_flags['FIN'] += 1
 
-            # IP Protocols Counting
             if hasattr(packet, 'ip') and hasattr(packet.ip, 'proto'):
                 ip_protocols[packet.ip.proto] += 1
 
-            # HTTP Counting
             if hasattr(packet, 'http'):
                 http_counter['HTTP1'] += 1
             if hasattr(packet, 'http2'):
@@ -124,12 +117,15 @@ class PcapProcessor:
         avg_packet_size = total_size / packet_count if packet_count else 0
         avg_packet_iat = duration / packet_count if packet_count else 0
 
-        # Calculate Flow Directionality Ratio
         total_forward = sum(flow["forward"] for flow in flows.values())
         total_backward = sum(flow["backward"] for flow in flows.values())
 
-        # Fix: Prevent `inf` by using `total_forward` if no backward packets exist
         flow_directionality_ratio = round(total_forward / total_backward, 3) if total_backward > 0 else total_forward
+
+        # ✅ **Compute Burstiness Factors**
+        pmr_value = self.calculate_pmr(packet_sizes, iat_list)
+        mmr_value = self.calculate_mmr(packet_sizes, timestamps_list)
+        cv_value = self.calculate_cv(iat_list)
 
         self.pcap_data.append({
             "Pcap file": file_name,
@@ -140,15 +136,60 @@ class PcapProcessor:
             "Avg Packet IAT (seconds)": round(avg_packet_iat, 6),
             "Inter-Packet Arrival Times": iat_list,
             "Packet Timestamps": timestamps_list,
-            "Packet Sizes": packet_sizes,  # ✅ Added for packet size distribution
+            "Packet Sizes": packet_sizes,
             "Flow Directionality Ratio": flow_directionality_ratio,
-            "Flows": flows,  # ✅ Store the full flow dictionary
+            "Flows": flows,
             "Http Count": " ".join([f"{k}-{v}" for k, v in http_counter.items()]) or "0",
             "Tcp Flags": " ".join([f"{k}-{v}" for k, v in tcp_flags.items()]) or "N/A",
             "Ip protocols": " ".join([f"{k}-{v}" for k, v in ip_protocols.items()]) or "N/A",
+            "PMR": round(pmr_value, 2),
+            "MMR": round(mmr_value, 2),
+            "CV": round(cv_value, 2),
         })
 
         return True
+
+    def calculate_pmr(self, packet_sizes, iat_list):
+        if not packet_sizes or not iat_list:
+            return 0  # Handle empty lists safely
+
+        # Trim packet_sizes to match iat_list length
+        packet_sizes = packet_sizes[:len(iat_list)]
+
+        # Convert to NumPy arrays
+        iat_array = np.array(iat_list)
+        packet_sizes_array = np.array(packet_sizes)
+
+        # ✅ Prevent division by zero: Replace zero IAT values with a small value
+        iat_array[iat_array <= 0] = 1e-6  # Small nonzero value to prevent divide-by-zero
+
+        # Compute throughput
+        throughput = packet_sizes_array / iat_array
+
+        # ✅ Handle NaN cases: If mean is zero, return 0 instead of NaN
+        mean_throughput = np.mean(throughput)
+        if mean_throughput == 0:
+            return 0
+
+        pmr_value = np.max(throughput) / mean_throughput
+
+        return np.nan_to_num(pmr_value, nan=0)  # ✅ Replace NaN with 0
+
+    def calculate_mmr(self, packet_sizes, timestamps):
+        if not packet_sizes or not timestamps:
+            return 0.0
+        time_windows = {}
+        for size, ts in zip(packet_sizes, timestamps):
+            window = int(ts)
+            time_windows[window] = time_windows.get(window, 0) + size
+        max_rate = max(time_windows.values()) if time_windows else 0
+        mean_rate = np.mean(list(time_windows.values())) if time_windows else 0
+        return max_rate / mean_rate if mean_rate > 0 else 0.0
+
+    def calculate_cv(self, iat_list):
+        if len(iat_list) < 2:
+            return 0.0
+        return np.std(iat_list) / np.mean(iat_list) if np.mean(iat_list) > 0 else 0.0
 
     def show_message(self, message):
         root = tk.Tk()

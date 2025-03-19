@@ -42,12 +42,23 @@ class Graphs(tk.Toplevel):
 
         self.tcp_flags_button = tk.Button(button_frame, text="TCP Flags Distribution", command=self.plot_tcp_flags)
         self.tcp_flags_button.pack(side=tk.LEFT, padx=5)
+        self.flow_size_over_pcap_button = tk.Button(
+            button_frame, text="Flow Size Over PCAP", command=self.plot_flow_size_over_pcap
+        )
+        self.flow_size_over_pcap_button.pack(side=tk.LEFT, padx=5)
 
-
+        self.flow_volume_over_pcap_button = tk.Button(
+            button_frame, text="Flow Volume Over PCAP", command=self.plot_flow_volume_over_pcap
+        )
+        self.flow_volume_over_pcap_button.pack(side=tk.LEFT, padx=5)
 
         self.flow_dir_button = tk.Button(button_frame, text="Flow Dir",
                                             command=self.plot_flow_dir)
         self.flow_dir_button.pack(side=tk.LEFT, padx=5)
+        self.burstiness_button = tk.Button(
+            button_frame, text="Burstiness", command=self.plot_burstiness
+        )
+        self.burstiness_button.pack(side=tk.LEFT, padx=5)
 
 
 
@@ -60,6 +71,62 @@ class Graphs(tk.Toplevel):
         self.graph_frame = tk.Frame(self)
         self.graph_frame.pack(expand=True, fill=tk.BOTH)
 
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.widgets import RadioButtons
+
+    def plot_burstiness(self):
+        if self.canvas:
+            self.canvas.get_tk_widget().destroy()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Extract PCAP names and values
+        pcap_files = [entry["Pcap file"] for entry in self.data]
+        pmr_values = [entry.get("PMR", 0) for entry in self.data]
+        mmr_values = [entry.get("MMR", 0) for entry in self.data]
+        cv_values = [entry.get("CV", 0) for entry in self.data]
+
+        # Define colors for each PCAP
+        unique_pcaps = list(set(pcap_files))
+        color_map = plt.get_cmap("tab10")
+        pcap_colors = {pcap: color_map(i) for i, pcap in enumerate(unique_pcaps)}
+
+        # Initial plot with PMR as default
+        bars = ax.bar(pcap_files, pmr_values, color=[pcap_colors[pcap] for pcap in pcap_files])
+        ax.set_ylabel("Burstiness Value")
+        ax.set_xlabel("PCAP Files")
+        ax.set_title("Burstiness Factors (PMR, MMR, CV)")
+        ax.set_xticklabels(pcap_files, rotation=45, ha="right")
+
+        # Draggable legend
+        legend_labels = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=pcap_colors[pcap], markersize=10)
+                         for pcap in unique_pcaps]
+        legend = ax.legend(legend_labels, unique_pcaps, title="PCAPs", loc="upper right", frameon=True)
+        legend.set_draggable(True)
+
+        # Radio Buttons for selecting PMR, MMR, or CV
+        rax = plt.axes([0.8, 0.4, 0.15, 0.2], frameon=True, facecolor="lightgray")  # Adjust position
+        self.radio_buttons_burstiness = RadioButtons(rax, ["PMR", "MMR", "CV"], active=0)
+
+        def update_plot(label):
+            """ Update the bar graph based on selected burstiness metric. """
+            if label == "PMR":
+                values = pmr_values
+            elif label == "MMR":
+                values = mmr_values
+            else:  # CV
+                values = cv_values
+
+            # Update bar heights
+            for bar, value in zip(bars, values):
+                bar.set_height(value)
+
+            fig.canvas.draw_idle()
+
+        self.radio_buttons_burstiness.on_clicked(update_plot)  # ✅ Fix: Persistent event binding
+
+        self.display_graph(fig)
 
     def plot_avg_packet_size(self):
         self.plot_graph("Avg Packet size (bytes)", "Average Packet Size (bytes)")
@@ -259,6 +326,7 @@ class Graphs(tk.Toplevel):
 
         self.display_graph(fig)
 
+
     def plot_flow_size_vs_volume(self):
         if not self.data:
             print("No data available for plotting.")
@@ -393,6 +461,95 @@ class Graphs(tk.Toplevel):
 
         self.display_graph(fig)
 
+    def plot_flow_volume_over_pcap(self):
+        if self.canvas:
+            self.canvas.get_tk_widget().destroy()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Extract flow volume data
+        pcap_files = [entry["Pcap file"] for entry in self.data]
+        flow_volumes = [entry.get("Flow Volume (bytes)", 0) for entry in self.data]
+
+        if not pcap_files:
+            ax.text(0.5, 0.5, "No Flow Volume Data Available", fontsize=12, ha='center', va='center')
+            ax.set_xticks([])
+            ax.set_yticks([])
+        else:
+            # Create a bar chart
+            bars = ax.bar(pcap_files, flow_volumes, color="tomato", edgecolor="black", alpha=0.7)
+
+            # Format axes
+            ax.set_xticks(range(len(pcap_files)))
+            ax.set_xticklabels(pcap_files, rotation=45, ha="right")
+            ax.set_xlabel("PCAP Files")
+            ax.set_ylabel("Flow Volume (Bytes)")
+            ax.set_title("Flow Volume Over PCAP")
+
+            # Add legend and make it draggable
+            legend = ax.legend([bars], ["Flow Volume"], loc="upper right", frameon=True)
+            legend.set_draggable(True)
+
+            ax.grid(axis="y", linestyle="--", alpha=0.7)
+
+        self.display_graph(fig)
+
+    def plot_flow_size_over_pcap(self):
+        if self.canvas:
+            self.canvas.get_tk_widget().destroy()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        pcap_files = [entry["Pcap file"] for entry in self.data]
+        flow_sizes = [entry.get("Flow size", 0) for entry in self.data]
+
+        # Assign a unique color to each PCAP file
+        unique_pcaps = list(set(pcap_files))
+        color_map = plt.get_cmap("tab10")
+        pcap_colors = {pcap: color_map(i % 10) for i, pcap in enumerate(unique_pcaps)}
+
+        bars = ax.bar(pcap_files, flow_sizes, color=[pcap_colors[pcap] for pcap in pcap_files], edgecolor='black')
+
+        ax.set_xlabel("PCAP File")
+        ax.set_ylabel("Flow Size (Total Packets)")
+        ax.set_title("Flow Size Over PCAPs")
+        ax.tick_params(axis='x', rotation=45)
+
+        # Create a draggable legend
+        legend_patches = [plt.Line2D([0], [0], color=pcap_colors[pcap], lw=4, label=pcap) for pcap in unique_pcaps]
+        legend = ax.legend(handles=legend_patches, title="PCAP Files", loc="upper right", frameon=True)
+        legend.set_draggable(True)
+
+        self.display_graph(fig)
+
+    def plot_flow_volume_over_pcap(self):
+        if self.canvas:
+            self.canvas.get_tk_widget().destroy()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        pcap_files = [entry["Pcap file"] for entry in self.data]
+        flow_volumes = [entry.get("Flow Volume (bytes)", 0) for entry in self.data]
+
+        # Assign a unique color to each PCAP file
+        unique_pcaps = list(set(pcap_files))
+        color_map = plt.get_cmap("tab10")
+        pcap_colors = {pcap: color_map(i % 10) for i, pcap in enumerate(unique_pcaps)}
+
+        bars = ax.bar(pcap_files, flow_volumes, color=[pcap_colors[pcap] for pcap in pcap_files], edgecolor='black')
+
+        ax.set_xlabel("PCAP File")
+        ax.set_ylabel("Flow Volume (Bytes)")
+        ax.set_title("Flow Volume Over PCAPs")
+        ax.tick_params(axis='x', rotation=45)
+
+        # Create a draggable legend
+        legend_patches = [plt.Line2D([0], [0], color=pcap_colors[pcap], lw=4, label=pcap) for pcap in unique_pcaps]
+        legend = ax.legend(handles=legend_patches, title="PCAP Files", loc="upper right", frameon=True)
+        legend.set_draggable(True)
+
+        self.display_graph(fig)
+
     def display_graph(self, fig):
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
@@ -402,20 +559,31 @@ class Graphs(tk.Toplevel):
         self.canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
         self.canvas.draw()
 
-
     def plot_graph(self, column_name, ylabel):
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
 
         fig, ax = plt.subplots(figsize=(8, 5))
+
         pcap_files = [entry["Pcap file"] for entry in self.data]
         values = [entry.get(column_name, 0) for entry in self.data]
 
-        ax.bar(pcap_files, values)
-        ax.set_xlabel("Pcap File")
+        # Assign a unique color to each PCAP file
+        unique_pcaps = list(set(pcap_files))
+        color_map = plt.get_cmap("tab10")
+        pcap_colors = {pcap: color_map(i % 10) for i, pcap in enumerate(unique_pcaps)}
+
+        bars = ax.bar(pcap_files, values, color=[pcap_colors[pcap] for pcap in pcap_files], edgecolor='black')
+
+        ax.set_xlabel("PCAP File")
         ax.set_ylabel(ylabel)
         ax.set_title(ylabel)
         ax.tick_params(axis='x', rotation=45)
+
+        # Create a draggable legend
+        legend_patches = [plt.Line2D([0], [0], color=pcap_colors[pcap], lw=4, label=pcap) for pcap in unique_pcaps]
+        legend = ax.legend(handles=legend_patches, title="PCAP Files", loc="upper right", frameon=True)
+        legend.set_draggable(True)
 
         self.display_graph(fig)
 

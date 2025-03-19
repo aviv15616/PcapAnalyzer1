@@ -8,7 +8,7 @@ class DataFrameWindow(tk.Toplevel):
     def __init__(self, master, data):
         super().__init__(master)
         self.title("PCAP DataFrame")
-        self.geometry("1000x450")  # Increased width for better readability
+        self.geometry("1200x450")  # Increased width for better readability
 
         self.column_descriptions = {
             "Pcap file": "The name of the loaded PCAP file.",
@@ -21,6 +21,9 @@ class DataFrameWindow(tk.Toplevel):
             "Http Count": "Number of HTTP packets categorized by version.",
             "Tcp Flags": "Count of TCP flags (SYN, ACK, RST, PSH, FIN).",
             "Ip protocols": "Count of different IP protocols used in packets.",
+            "PMR": "Peak-to-Mean Ratio: Measures traffic burstiness by comparing peak throughput to mean throughput.",
+            "MMR": "Max/Mean Rate: Compares peak transmission rate to average rate over time.",
+            "CV": "Coefficient of Variation: Measures inter-packet timing variability.",
         }
 
         self.tree = ttk.Treeview(self, columns=list(self.column_descriptions.keys()), show='headings')
@@ -62,6 +65,14 @@ class DataFrameWindow(tk.Toplevel):
 
         x_offset = self.winfo_pointerx() - self.winfo_rootx() + 10
         y_offset = self.winfo_pointery() - self.winfo_rooty() + 15
+
+        # Ensure tooltip does not go off-screen
+        screen_width = self.winfo_width()
+        tooltip_width = 200  # Estimated width of the tooltip
+
+        if x_offset + tooltip_width > screen_width:
+            x_offset = screen_width - tooltip_width - 20  # Offset to keep it inside the window
+
         self.tooltip.place(x=x_offset, y=y_offset)
 
     def on_hover(self, event):
@@ -81,7 +92,7 @@ class DataFrameWindow(tk.Toplevel):
     def sort_column(self, col):
         reverse = self.sort_order.get(col, False)
         try:
-            if col == "Flow Directionality Ratio":
+            if col in ["Flow Directionality Ratio", "PMR", "MMR", "CV"]:
                 self.data.sort(key=lambda x: float(x[col]) if isinstance(x[col], (int, float)) else 0, reverse=reverse)
             else:
                 self.data.sort(
