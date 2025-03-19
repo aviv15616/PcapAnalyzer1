@@ -23,17 +23,17 @@ class Graphs(tk.Toplevel):
         buttons = [
             ("Avg Packet Size", self.plot_avg_packet_size),
             ("Avg IAT", self.plot_avg_iat),
-            ("IP Protocols", self.plot_ip_protocols),
             ("Packet Size Distribution", self.plot_packet_size_distribution),
-            ("Flow Size vs. Volume", self.plot_flow_size_vs_volume),
-            ("IAT Histogram", self.plot_iat_histogram),
-            ("TCP Flags Distribution", self.plot_tcp_flags),
+            ("IAT Distribution", self.plot_iat_histogram),
+            ("Flow Volume Per Second", self.plot_bytes_per_second),
+            ("Flow Size vs. Flow Volume", self.plot_flow_size_vs_volume),
             ("Flow Size Over PCAP", self.plot_flow_size_over_pcap),
             ("Flow Volume Over PCAP", self.plot_flow_volume_over_pcap),
+            ("IP Protocols Distribution", self.plot_ip_protocols),
+            ("TCP Flags Distribution", self.plot_tcp_flags),
             ("Flow Direction", self.plot_flow_dir),
-            ("Burstiness", self.plot_burstiness),
             ("HTTP Distribution", self.plot_http_distribution),
-            ("Bytes Per Second", self.plot_bytes_per_second)
+            ("Burstiness Factors", self.plot_burstiness),
         ]
 
         for text, command in buttons:
@@ -197,6 +197,8 @@ class Graphs(tk.Toplevel):
             "Flow Volume (Bytes)",
             "Flow Volume Over PCAP"
         )
+
+
 
     def plot_ip_protocols(self):
         """ Displays IP protocol distribution across PCAP files. """
