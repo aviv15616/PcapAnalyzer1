@@ -67,32 +67,34 @@ class PcapProcessor:
                 iat_list.append(current_time - prev_time)
             prev_time = current_time
 
-            if hasattr(packet, 'ip') and hasattr(packet, 'tcp'):
+            # ✅ Extract Source & Destination IPs
+            if hasattr(packet, 'ip'):
                 src_ip = packet.ip.src
                 dst_ip = packet.ip.dst
-                src_port = packet.tcp.srcport
-                dst_port = packet.tcp.dstport
-                proto = "TCP"
-            elif hasattr(packet, 'ip') and hasattr(packet, 'udp'):
-                src_ip = packet.ip.src
-                dst_ip = packet.ip.dst
-                src_port = packet.udp.srcport
-                dst_port = packet.udp.dstport
-                proto = "UDP"
-            else:
-                continue
+                proto = packet.ip.proto  # Capture ALL IP protocols
 
-            flow_key = (src_ip, dst_ip, src_port, dst_port, proto)
-            reverse_flow_key = (dst_ip, src_ip, dst_port, src_port, proto)
+                # ✅ Extract Ports (if available)
+                src_port = getattr(packet, 'tcp', getattr(packet, 'udp', None))
+                dst_port = getattr(packet, 'tcp', getattr(packet, 'udp', None))
+                src_port = src_port.srcport if src_port else "N/A"
+                dst_port = dst_port.dstport if dst_port else "N/A"
 
-            if flow_key not in flows and reverse_flow_key not in flows:
-                flows[flow_key] = {"forward": 0, "backward": 0}
+                # ✅ Store protocol counts
+                ip_protocols[proto] += 1
 
-            if flow_key in flows:
-                flows[flow_key]["forward"] += 1
-            elif reverse_flow_key in flows:
-                flows[reverse_flow_key]["backward"] += 1
+                # ✅ Flow Tracking for All Protocols
+                flow_key = (src_ip, dst_ip, src_port, dst_port, proto)
+                reverse_flow_key = (dst_ip, src_ip, dst_port, src_port, proto)
 
+                if flow_key not in flows and reverse_flow_key not in flows:
+                    flows[flow_key] = {"forward": 0, "backward": 0}
+
+                if flow_key in flows:
+                    flows[flow_key]["forward"] += 1
+                elif reverse_flow_key in flows:
+                    flows[reverse_flow_key]["backward"] += 1
+
+            # ✅ TCP Flag Counting (Only for TCP Packets)
             if hasattr(packet, 'tcp') and hasattr(packet.tcp, 'flags'):
                 flags = int(packet.tcp.flags, 16)
                 if flags & 0x02: tcp_flags['SYN'] += 1
@@ -101,9 +103,7 @@ class PcapProcessor:
                 if flags & 0x08: tcp_flags['PSH'] += 1
                 if flags & 0x01: tcp_flags['FIN'] += 1
 
-            if hasattr(packet, 'ip') and hasattr(packet.ip, 'proto'):
-                ip_protocols[packet.ip.proto] += 1
-
+            # ✅ HTTP Version Counting
             if hasattr(packet, 'http'):
                 http_counter['HTTP1'] += 1
             if hasattr(packet, 'http2'):
@@ -151,29 +151,19 @@ class PcapProcessor:
 
     def calculate_pmr(self, packet_sizes, iat_list):
         if not packet_sizes or not iat_list:
-            return 0  # Handle empty lists safely
+            return 0
 
-        # Trim packet_sizes to match iat_list length
         packet_sizes = packet_sizes[:len(iat_list)]
-
-        # Convert to NumPy arrays
         iat_array = np.array(iat_list)
         packet_sizes_array = np.array(packet_sizes)
-
-        # ✅ Prevent division by zero: Replace zero IAT values with a small value
-        iat_array[iat_array <= 0] = 1e-6  # Small nonzero value to prevent divide-by-zero
-
-        # Compute throughput
+        iat_array[iat_array <= 0] = 1e-6
         throughput = packet_sizes_array / iat_array
 
-        # ✅ Handle NaN cases: If mean is zero, return 0 instead of NaN
         mean_throughput = np.mean(throughput)
         if mean_throughput == 0:
             return 0
 
-        pmr_value = np.max(throughput) / mean_throughput
-
-        return np.nan_to_num(pmr_value, nan=0)  # ✅ Replace NaN with 0
+        return np.nan_to_num(np.max(throughput) / mean_throughput, nan=0)
 
     def calculate_mmr(self, packet_sizes, timestamps):
         if not packet_sizes or not timestamps:

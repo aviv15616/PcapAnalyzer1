@@ -153,26 +153,7 @@ class Graphs(tk.Toplevel):
     import tkinter as tk
 
 
-    class Graphs(tk.Toplevel):
-        def __init__(self, master, data):
-            super().__init__(master)
-            self.title("PCAP Graphs")
-            self.geometry("1000x800")
 
-            self.data = data
-            self.canvas = None  # Placeholder for graph canvas
-            self.radio_buttons = None  # Reference storage for buttons
-            self.legend = None  # Store the legend reference
-
-            button_frame = tk.Frame(self)
-            button_frame.pack(pady=10)
-
-            self.packet_size_button = tk.Button(button_frame, text="Packet Size Distribution",
-                                                command=self.plot_packet_size_distribution)
-            self.packet_size_button.pack(side=tk.LEFT, padx=5)
-
-            self.graph_frame = tk.Frame(self)
-            self.graph_frame.pack(expand=True, fill=tk.BOTH)
 
     def plot_packet_size_distribution(self):
         if self.canvas:
@@ -400,20 +381,22 @@ class Graphs(tk.Toplevel):
                     http_per_pcap[pcap_file][key.upper()] = int(value)
 
         http_versions = ["HTTP1", "HTTP2", "HTTP3"]
-        x = np.arange(len(http_versions))  # Base positions for HTTP versions
-        width = 0.15  # Smaller bar width for spacing
+        num_pcaps = len(http_per_pcap)
+
+        x = np.arange(len(http_versions)) * 2  # 🔥 Increased spacing between groups
+        width = 0.2  # 🔥 Slightly reduced width for better separation
 
         for i, (pcap_file, http_counts) in enumerate(http_per_pcap.items()):
             y = [http_counts[version] for version in http_versions]
-            ax.bar(x + (i * width), y, width=width, label=pcap_file)  # Apply offset
+            ax.bar(x + (i * width) - (num_pcaps * width / 2), y, width=width, label=pcap_file)  # 🔥 Adjusted placement
 
-        ax.set_xticks(x + (width * (len(http_per_pcap) / 2)))  # Adjust tick positions
+        ax.set_xticks(x)
         ax.set_xticklabels(http_versions, rotation=0)
         ax.set_xlabel("HTTP Versions")
         ax.set_ylabel("Packet Count")
         ax.set_title("HTTP Packets Distribution")
 
-        # Show legend & make it draggable
+        # ✅ Draggable legend
         legend = ax.legend(frameon=True)
         legend.set_draggable(True)
 
@@ -538,33 +521,7 @@ class Graphs(tk.Toplevel):
 
         self.display_graph(fig)
 
-    def plot_flow_volume_over_pcap(self):
-        if self.canvas:
-            self.canvas.get_tk_widget().destroy()
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        pcap_files = [entry["Pcap file"] for entry in self.data]
-        flow_volumes = [entry.get("Flow Volume (bytes)", 0) for entry in self.data]
-
-        # Assign a unique color to each PCAP file
-        unique_pcaps = list(set(pcap_files))
-        color_map = plt.get_cmap("tab10")
-        pcap_colors = {pcap: color_map(i % 10) for i, pcap in enumerate(unique_pcaps)}
-
-        bars = ax.bar(pcap_files, flow_volumes, color=[pcap_colors[pcap] for pcap in pcap_files], edgecolor='black')
-
-        ax.set_xlabel("PCAP File")
-        ax.set_ylabel("Flow Volume (Bytes)")
-        ax.set_title("Flow Volume Over PCAPs")
-        ax.tick_params(axis='x', rotation=45)
-
-        # Create a draggable legend
-        legend_patches = [plt.Line2D([0], [0], color=pcap_colors[pcap], lw=4, label=pcap) for pcap in unique_pcaps]
-        legend = ax.legend(handles=legend_patches, title="PCAP Files", loc="upper right", frameon=True)
-        legend.set_draggable(True)
-
-        self.display_graph(fig)
 
     def display_graph(self, fig):
         if self.canvas:
@@ -619,22 +576,26 @@ class Graphs(tk.Toplevel):
                     category_per_pcap[pcap_file][key] += int(value)
 
         categories = sorted(set(cat for pcap in category_per_pcap.values() for cat in pcap))
-        x = np.arange(len(categories))
-        width = 0.2  # Adjusted bar width for visibility
+        num_pcaps = len(category_per_pcap)
+
+        x = np.arange(len(categories)) * 2  # 🔥 Increased spacing between categories
+        width = 0.2  # 🔥 Narrower bars to avoid clutter
 
         for i, (pcap_file, category_counts) in enumerate(category_per_pcap.items()):
             y = [category_counts.get(category, 0) for category in categories]
-            ax.bar(x + (i * width), y, width=width, label=pcap_file)
+            ax.bar(x + (i * width) - (num_pcaps * width / 2), y, width=width, label=pcap_file)  # 🔥 Adjusted placement
 
-        ax.set_xticks(x + width / 2)
+        ax.set_xticks(x)
         ax.set_xticklabels(categories, rotation=45)
         ax.set_xlabel("Category")
         ax.set_ylabel(ylabel)
         ax.set_title(ylabel)
 
-        # ✅ Make the legend draggable
+        # ✅ Draggable legend
         legend = ax.legend(loc="upper right", frameon=True)
         legend.set_draggable(True)
 
         self.display_graph(fig)
+
+
 
