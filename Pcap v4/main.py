@@ -13,7 +13,7 @@ class PcapGUI:
         self.root.title("PCAP Analyzer")
         self.root.geometry("400x350")
 
-        self.processor = PcapProcessor(sample_mode=False)  # Initialize processor with sampling enabled
+        self.processor = PcapProcessor(sample_mode=True)  # Initialize processor with sampling enabled
         self.data_window = None  # No DataFrameWindow initialized yet
         self.graph_window = None
 

@@ -8,7 +8,6 @@ from tkinter import messagebox
 
 class PcapProcessor:
     def __init__(self, sample_mode=False):  # Add a sample mode flag
-
         self.pcap_data = []
         self.processed_files = set()  # Track uploaded file names
         self.sample_mode = sample_mode  # Enable/Disable sampling
@@ -43,6 +42,8 @@ class PcapProcessor:
         ip_protocols = Counter()
         iat_list = []  # Store all IAT values
         timestamps_list = []  # Store all packet timestamps
+        packet_sizes = []  # ✅ Store all packet sizes
+        flows = {}  # Store forward and backward packet counts per flow
 
         prev_time = None
 
@@ -50,7 +51,11 @@ class PcapProcessor:
             if self.sample_mode and packet_count >= sample_limit:
                 break
             packet_count += 1
-            total_size += int(packet.length)
+            packet_length = int(packet.length)
+            total_size += packet_length
+
+            # ✅ Store packet sizes for distribution analysis
+            packet_sizes.append(packet_length)
 
             # Track first and last packet time
             current_time = float(packet.sniff_time.timestamp())
@@ -64,6 +69,33 @@ class PcapProcessor:
             if prev_time is not None:
                 iat_list.append(current_time - prev_time)
             prev_time = current_time
+
+            # Extract flow direction (based on source-destination pair)
+            if hasattr(packet, 'ip') and hasattr(packet, 'tcp'):
+                src_ip = packet.ip.src
+                dst_ip = packet.ip.dst
+                src_port = packet.tcp.srcport
+                dst_port = packet.tcp.dstport
+                proto = "TCP"
+            elif hasattr(packet, 'ip') and hasattr(packet, 'udp'):
+                src_ip = packet.ip.src
+                dst_ip = packet.ip.dst
+                src_port = packet.udp.srcport
+                dst_port = packet.udp.dstport
+                proto = "UDP"
+            else:
+                continue  # Skip non-IP packets
+
+            flow_key = (src_ip, dst_ip, src_port, dst_port, proto)
+            reverse_flow_key = (dst_ip, src_ip, dst_port, src_port, proto)
+
+            if flow_key not in flows and reverse_flow_key not in flows:
+                flows[flow_key] = {"forward": 0, "backward": 0}
+
+            if flow_key in flows:
+                flows[flow_key]["forward"] += 1
+            elif reverse_flow_key in flows:
+                flows[reverse_flow_key]["backward"] += 1
 
             # TCP Flags Counting
             if hasattr(packet, 'tcp') and hasattr(packet.tcp, 'flags'):
@@ -92,6 +124,13 @@ class PcapProcessor:
         avg_packet_size = total_size / packet_count if packet_count else 0
         avg_packet_iat = duration / packet_count if packet_count else 0
 
+        # Calculate Flow Directionality Ratio
+        total_forward = sum(flow["forward"] for flow in flows.values())
+        total_backward = sum(flow["backward"] for flow in flows.values())
+
+        # Fix: Prevent `inf` by using `total_forward` if no backward packets exist
+        flow_directionality_ratio = round(total_forward / total_backward, 3) if total_backward > 0 else total_forward
+
         self.pcap_data.append({
             "Pcap file": file_name,
             "Flow size": packet_count,
@@ -99,8 +138,11 @@ class PcapProcessor:
             "Flow duration (seconds)": round(duration, 2),
             "Avg Packet size (bytes)": round(avg_packet_size, 2),
             "Avg Packet IAT (seconds)": round(avg_packet_iat, 6),
-            "Inter-Packet Arrival Times": iat_list,  # Store full list
-            "Packet Timestamps": timestamps_list,  # Store all timestamps
+            "Inter-Packet Arrival Times": iat_list,
+            "Packet Timestamps": timestamps_list,
+            "Packet Sizes": packet_sizes,  # ✅ Added for packet size distribution
+            "Flow Directionality Ratio": flow_directionality_ratio,
+            "Flows": flows,  # ✅ Store the full flow dictionary
             "Http Count": " ".join([f"{k}-{v}" for k, v in http_counter.items()]) or "0",
             "Tcp Flags": " ".join([f"{k}-{v}" for k, v in tcp_flags.items()]) or "N/A",
             "Ip protocols": " ".join([f"{k}-{v}" for k, v in ip_protocols.items()]) or "N/A",

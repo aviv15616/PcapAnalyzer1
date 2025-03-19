@@ -1,14 +1,14 @@
 import tkinter as tk
 from tkinter import ttk
 import pandas as pd
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 
 class DataFrameWindow(tk.Toplevel):
     def __init__(self, master, data):
         super().__init__(master)
         self.title("PCAP DataFrame")
-        self.geometry("900x400")
+        self.geometry("1000x450")  # Increased width for better readability
 
         self.column_descriptions = {
             "Pcap file": "The name of the loaded PCAP file.",
@@ -17,9 +17,10 @@ class DataFrameWindow(tk.Toplevel):
             "Flow duration (seconds)": "Total duration of the capture in seconds.",
             "Avg Packet size (bytes)": "Average packet size in bytes.",
             "Avg Packet IAT (seconds)": "Average inter-arrival time between packets.",
+            "Flow Directionality Ratio": "Ratio of forward to backward packet count in the PCAP.",
             "Http Count": "Number of HTTP packets categorized by version.",
             "Tcp Flags": "Count of TCP flags (SYN, ACK, RST, PSH, FIN).",
-            "Ip protocols": "Count of different IP protocols used in packets."
+            "Ip protocols": "Count of different IP protocols used in packets.",
         }
 
         self.tree = ttk.Treeview(self, columns=list(self.column_descriptions.keys()), show='headings')
@@ -27,16 +28,16 @@ class DataFrameWindow(tk.Toplevel):
 
         for col in self.column_descriptions.keys():
             self.tree.heading(col, text=col, command=lambda c=col: self.sort_column(c))
-            self.tree.column(col, width=100, anchor="center")
+            self.tree.column(col, width=120, anchor="center")
 
         self.tree.pack(expand=True, fill="both")
 
-        self.tooltip = None  # Ensure we only create one tooltip at a time
+        self.tooltip = None  # Ensure only one tooltip is created at a time
 
         self.tree.bind("<Motion>", self.on_hover)
         self.tree.bind("<Leave>", self.hide_tooltip)
 
-        self.export_button = tk.Button(self, text="Export to CSV", command=self.export_to_excel)
+        self.export_button = tk.Button(self, text="Export to CSV", command=self.export_to_csv)
         self.export_button.pack(pady=10)
 
         self.data = data  # Store data internally for sorting
@@ -80,22 +81,26 @@ class DataFrameWindow(tk.Toplevel):
     def sort_column(self, col):
         reverse = self.sort_order.get(col, False)
         try:
-            self.data.sort(
-                key=lambda x: float(x[col].split()[0]) if isinstance(x[col], str) and x[col].split()[0].isdigit() else
-                x[col], reverse=reverse)
+            if col == "Flow Directionality Ratio":
+                self.data.sort(key=lambda x: float(x[col]) if isinstance(x[col], (int, float)) else 0, reverse=reverse)
+            else:
+                self.data.sort(
+                    key=lambda x: float(x[col].split()[0]) if isinstance(x[col], str) and x[col].split()[0].isdigit()
+                    else x[col], reverse=reverse
+                )
         except Exception:
             self.data.sort(key=lambda x: x[col], reverse=reverse)
 
         self.sort_order[col] = not reverse  # Toggle sorting order
         self.update_data(self.data)
 
-    def export_to_excel(self):
+    def export_to_csv(self):
         if not self.data:
             return
 
         file_path = filedialog.asksaveasfilename(defaultextension=".csv",
-                                                 filetypes=[("Csv Files", "*.csv"), ("All Files", "*.*")])
+                                                 filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")])
         if file_path:
             df = pd.DataFrame(self.data)
             df.to_csv(file_path, index=False)
-            tk.messagebox.showinfo("Export Successful", f"Data exported to {file_path}")
+            messagebox.showinfo("Export Successful", f"Data exported to {file_path}")
