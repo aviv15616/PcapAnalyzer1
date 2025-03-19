@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from collections import Counter
-from matplotlib.widgets import RadioButtons, CheckButtons
+
 
 
 class Graphs(tk.Toplevel):

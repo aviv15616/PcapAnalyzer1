@@ -20,10 +20,9 @@ class PcapProcessor:
         if file_name in self.processed_files:
             self.show_message("Error: PCAP file with the same name already loaded.")
             return False
-
         if len(self.pcap_data) >= 10:
+            self.show_message("Error: Maximum of 10 PCAP files already loaded.")
             return False
-
         self.processed_files.add(file_name)
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
