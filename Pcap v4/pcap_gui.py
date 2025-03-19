@@ -13,7 +13,7 @@ class PcapGUI:
         self.root.title("PCAP Analyzer")
         self.root.geometry("400x350")
 
-        self.processor = PcapProcessor(sample_mode=True)  # Initialize processor with sampling enabled
+        self.processor = PcapProcessor(sample_mode=False)  # Initialize processor with sampling enabled for tests disabled for true results
         self.data_window = None  # No DataFrameWindow initialized yet
         self.graph_window = None
 
@@ -93,6 +93,7 @@ class PcapGUI:
     def show_dataframe(self, empty_init=False):
         if not self.data_window or not self.data_window.winfo_exists():
             self.data_window = DataFrameWindow(self.root, [] if empty_init else self.processor.pcap_data)
+            self.data_window.state("zoomed")  # ✅ Maximized window with controls
         else:
             self.data_window.update_data(self.processor.pcap_data)
             self.data_window.focus()

@@ -1,9 +1,8 @@
 import tkinter as tk
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import numpy as np
 from collections import Counter
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Graphs(tk.Toplevel):
@@ -25,15 +24,16 @@ class Graphs(tk.Toplevel):
             ("Avg IAT", self.plot_avg_iat),
             ("Packet Size Distribution", self.plot_packet_size_distribution),
             ("IAT Distribution", self.plot_iat_histogram),
-            ("Flow Volume Per Second", self.plot_bytes_per_second),
-            ("Flow Size vs. Flow Volume", self.plot_flow_size_vs_volume),
-            ("Flow Size Over PCAP", self.plot_flow_size_over_pcap),
-            ("Flow Volume Over PCAP", self.plot_flow_volume_over_pcap),
+            ("Flow Volume Per Sec", self.plot_bytes_per_second),
+            ("Flow Size vs. Volume", self.plot_flow_size_vs_volume),
+            ("Flow Size Per PCAP", self.plot_flow_size_over_pcap),
+            ("Flow Volume Per PCAP", self.plot_flow_volume_over_pcap),
+            ("Flow Direction", self.plot_flow_dir),
+            ("Burst Factors", self.plot_burstiness),
             ("IP Protocols Distribution", self.plot_ip_protocols),
             ("TCP Flags Distribution", self.plot_tcp_flags),
-            ("Flow Direction", self.plot_flow_dir),
             ("HTTP Distribution", self.plot_http_distribution),
-            ("Burstiness Factors", self.plot_burstiness),
+
         ]
 
         for text, command in buttons:
@@ -204,18 +204,7 @@ class Graphs(tk.Toplevel):
         """ Displays IP protocol distribution across PCAP files. """
         self.plot_category_graph("Ip protocols", "IP Protocols Distribution")
 
-    from matplotlib.widgets import CheckButtons, RadioButtons
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from matplotlib.widgets import CheckButtons
 
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from matplotlib.widgets import CheckButtons
-
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from matplotlib.widgets import CheckButtons
     def plot_flow_dir(self):
         """Plots the number of forward vs backward packets per PCAP file with Tkinter check buttons below."""
         if self.canvas:
