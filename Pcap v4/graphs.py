@@ -83,21 +83,29 @@ class Graphs(tk.Toplevel):
 
         # Extract PCAP names and values
         pcap_files = [entry["Pcap file"] for entry in self.data]
-        pmr_values = [entry.get("PMR", 0) for entry in self.data]
-        mmr_values = [entry.get("MMR", 0) for entry in self.data]
-        cv_values = [entry.get("CV", 0) for entry in self.data]
+        pmr_values = np.array([entry.get("PMR", 0) for entry in self.data])
+        mmr_values = np.array([entry.get("MMR", 0) for entry in self.data])
+        cv_values = np.array([entry.get("CV", 0) for entry in self.data])
 
         # Define colors for each PCAP
         unique_pcaps = list(set(pcap_files))
         color_map = plt.get_cmap("tab10")
         pcap_colors = {pcap: color_map(i) for i, pcap in enumerate(unique_pcaps)}
 
-        # Initial plot with PMR as default
-        bars = ax.bar(pcap_files, pmr_values, color=[pcap_colors[pcap] for pcap in pcap_files])
+        # Set default factor as PMR
+        selected_factor = "PMR"
+        values = pmr_values
+        max_value = max(values) * 1.1  # Add 10% padding for visibility
+        y_ticks = np.linspace(0, max_value, 5)  # Dynamically scale Y-axis
+
+        # Plot with PMR as default
+        bars = ax.bar(pcap_files, values, color=[pcap_colors[pcap] for pcap in pcap_files])
         ax.set_ylabel("Burstiness Value")
         ax.set_xlabel("PCAP Files")
         ax.set_title("Burstiness Factors (PMR, MMR, CV)")
         ax.set_xticklabels(pcap_files, rotation=45, ha="right")
+        ax.set_ylim(0, max_value)
+        ax.set_yticks(y_ticks)
 
         # Draggable legend
         legend_labels = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=pcap_colors[pcap], markersize=10)
@@ -106,11 +114,13 @@ class Graphs(tk.Toplevel):
         legend.set_draggable(True)
 
         # Radio Buttons for selecting PMR, MMR, or CV
-        rax = plt.axes([0.8, 0.4, 0.15, 0.2], frameon=True, facecolor="lightgray")  # Adjust position
+        rax = plt.axes([0.8, 0.4, 0.15, 0.2], frameon=True, facecolor="lightgray")
         self.radio_buttons_burstiness = RadioButtons(rax, ["PMR", "MMR", "CV"], active=0)
 
         def update_plot(label):
             """ Update the bar graph based on selected burstiness metric. """
+            nonlocal values, max_value, y_ticks
+
             if label == "PMR":
                 values = pmr_values
             elif label == "MMR":
@@ -118,13 +128,19 @@ class Graphs(tk.Toplevel):
             else:  # CV
                 values = cv_values
 
+            max_value = max(values) * 1.1  # Scale max value with padding
+            y_ticks = np.linspace(0, max_value, 5)  # Adjust Y-axis tick levels
+
             # Update bar heights
             for bar, value in zip(bars, values):
                 bar.set_height(value)
 
+            # Adjust Y-axis dynamically
+            ax.set_ylim(0, max_value)
+            ax.set_yticks(y_ticks)
             fig.canvas.draw_idle()
 
-        self.radio_buttons_burstiness.on_clicked(update_plot)  # ✅ Fix: Persistent event binding
+        self.radio_buttons_burstiness.on_clicked(update_plot)  # ✅ Persistent event binding
 
         self.display_graph(fig)
 

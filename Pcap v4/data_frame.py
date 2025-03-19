@@ -67,11 +67,13 @@ class DataFrameWindow(tk.Toplevel):
         y_offset = self.winfo_pointery() - self.winfo_rooty() + 15
 
         # Ensure tooltip does not go off-screen
+        self.update_idletasks()  # Update window dimensions
         screen_width = self.winfo_width()
-        tooltip_width = 200  # Estimated width of the tooltip
+        tooltip_width = self.tooltip.winfo_reqwidth()  # Get actual width of tooltip
 
+        # If tooltip exceeds the right boundary, adjust its position
         if x_offset + tooltip_width > screen_width:
-            x_offset = screen_width - tooltip_width - 20  # Offset to keep it inside the window
+            x_offset = screen_width - tooltip_width - 10  # Offset to keep it inside the window
 
         self.tooltip.place(x=x_offset, y=y_offset)
 
