@@ -11,6 +11,8 @@ class Graphs(tk.Toplevel):
         super().__init__(master)
         self.title("PCAP Graphs")
         self.geometry("1000x800")
+        self.checkbox_widgets={}
+        self.checkbox_frame = None
 
         self.data = data
         self.canvas = None
@@ -45,30 +47,7 @@ class Graphs(tk.Toplevel):
     # ✅ PLOT FUNCTIONS (FULLY INTEGRATED)
     # ==============================
 
-    def plot_iat_histogram(self):
-        """ Displays a histogram of inter-arrival times per PCAP file. """
-        fig, ax = plt.subplots(figsize=(10, 6))
 
-        iat_data_per_pcap = {entry["Pcap file"]: entry.get("Inter-Packet Arrival Times", []) for entry in self.data}
-        selected_pcap = next((pcap for pcap, iat in iat_data_per_pcap.items() if iat), None)
-
-        def update_histogram(pcap_name):
-            ax.clear()
-            iat_data = iat_data_per_pcap.get(pcap_name, [])
-
-            if not iat_data:
-                ax.text(0.5, 0.5, f"No IAT Data for {pcap_name}", fontsize=12, ha='center', va='center')
-            else:
-                bins = np.linspace(0, 0.09, 30)
-                ax.hist(iat_data, bins=bins, color="royalblue", edgecolor="black", alpha=0.7)
-                ax.set_xlabel("Inter-Packet Arrival Time (seconds)")
-                ax.set_ylabel("Frequency")
-                ax.set_title(f"IAT Histogram for {pcap_name}")
-
-            fig.canvas.draw_idle()
-
-        update_histogram(selected_pcap)
-        self.display_graph(fig)
 
     def plot_tcp_flags(self):
         """ Displays TCP flag distribution. """
@@ -93,15 +72,66 @@ class Graphs(tk.Toplevel):
             "Average IAT"
         )
 
+    def plot_iat_histogram(self):
+        """ Displays a histogram of inter-arrival times per PCAP file with radio buttons. """
+        if self.canvas:
+            self.canvas.get_tk_widget().destroy()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        iat_data_per_pcap = {entry["Pcap file"]: entry.get("Inter-Packet Arrival Times", []) for entry in self.data}
+        pcap_files = list(iat_data_per_pcap.keys())
+
+        selected_pcap = next((pcap for pcap, iat in iat_data_per_pcap.items() if iat),
+                             pcap_files[0] if pcap_files else None)
+
+        def update_histogram():
+            """ Updates the histogram based on the selected PCAP file. """
+            ax.clear()
+            pcap_name = self.radio_var.get()
+            iat_data = iat_data_per_pcap.get(pcap_name, [])
+
+            if not iat_data:
+                ax.text(0.5, 0.5, f"No IAT Data for {pcap_name}", fontsize=12, ha='center', va='center')
+            else:
+                bins = np.linspace(0, 0.09, 30)
+                ax.hist(iat_data, bins=bins, color="royalblue", edgecolor="black", alpha=0.7)
+                ax.set_xlabel("Inter-Packet Arrival Time (seconds)")
+                ax.set_ylabel("Frequency")
+                ax.set_title(f"IAT Histogram for {pcap_name}")
+
+            fig.canvas.draw_idle()
+
+        self.display_graph(fig)
+
+        # ✅ Ensure the control frame exists before setting `self.radio_var`
+        self.create_control_frame(
+            title="Select PCAP for IAT Histogram",
+            radio_options=pcap_files,
+            radio_callback=update_histogram
+        )
+
+        if selected_pcap:
+            self.radio_var.set(selected_pcap)
+            update_histogram()
+
     def plot_packet_size_distribution(self):
-        """ Displays a histogram of packet sizes per PCAP file. """
+        """ Displays a histogram of packet sizes per PCAP file with radio buttons. """
+        if self.canvas:
+            self.canvas.get_tk_widget().destroy()
+
         fig, ax = plt.subplots(figsize=(10, 6))
 
         packet_sizes_per_pcap = {entry["Pcap file"]: entry.get("Packet Sizes", []) for entry in self.data}
-        selected_pcap = next((pcap for pcap, sizes in packet_sizes_per_pcap.items() if sizes), None)
+        pcap_files = list(packet_sizes_per_pcap.keys())
 
-        def update_histogram(pcap_name):
+        selected_pcap = next((pcap for pcap, sizes in packet_sizes_per_pcap.items() if sizes),
+                             pcap_files[0] if pcap_files else None)
+
+        def update_histogram():
+            """ Updates the histogram based on the selected PCAP file. """
             ax.clear()
+            pcap_name = self.radio_var.get()
             sizes = packet_sizes_per_pcap.get(pcap_name, [])
 
             if not sizes:
@@ -115,11 +145,25 @@ class Graphs(tk.Toplevel):
 
             fig.canvas.draw_idle()
 
-        update_histogram(selected_pcap)
         self.display_graph(fig)
+
+        # ✅ Ensure the control frame exists before setting `self.radio_var`
+        self.create_control_frame(
+            title="Select PCAP for Histogram",
+            radio_options=pcap_files,
+            radio_callback=update_histogram
+        )
+
+        if selected_pcap:
+            self.radio_var.set(selected_pcap)
+            update_histogram()
 
     def plot_flow_size_vs_volume(self):
         """ Scatter plot of flow size vs. flow volume. """
+        # ✅ Destroy the existing control frame before displaying a new graph
+        if hasattr(self, "checkbox_frame") and self.checkbox_frame:
+            self.checkbox_frame.destroy()
+            self.checkbox_frame = None
         fig, ax = plt.subplots(figsize=(10, 6))
 
         flow_sizes = [entry.get("Flow size", 0) for entry in self.data]
@@ -170,9 +214,8 @@ class Graphs(tk.Toplevel):
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.widgets import CheckButtons
-
     def plot_flow_dir(self):
-        """Plots Forward vs. Backward packets per PCAP file with a single persistent checkbox box."""
+        """Plots the number of forward vs backward packets per PCAP file with Tkinter check buttons below."""
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
 
@@ -189,11 +232,8 @@ class Graphs(tk.Toplevel):
             if not flows:
                 continue
 
-            # ✅ Apply Top Flows Fix (Ensures sorting / selection logic)
-            top_flows = sorted(flows.items(), key=lambda x: sum(x[1].values()), reverse=True)[:10]
-
-            total_forward = sum(flow["forward"] for _, flow in top_flows)
-            total_backward = sum(flow["backward"] for _, flow in top_flows)
+            total_forward = sum(flow["forward"] for flow in flows.values())
+            total_backward = sum(flow["backward"] for flow in flows.values())
 
             pcap_files.append(pcap_file)
             forward_counts.append(total_forward)
@@ -203,67 +243,69 @@ class Graphs(tk.Toplevel):
             ax.text(0.5, 0.5, "No Flow Data Available", fontsize=12, ha='center', va='center')
             ax.set_xticks([])
             ax.set_yticks([])
-            self.display_graph(fig)
-            return
+            bars_forward = []
+            bars_backward = []
+        else:
+            x = np.arange(len(pcap_files))
+            width = 0.3
 
-        x = np.arange(len(pcap_files))
-        width = 0.3
+            # ✅ Store individual bars inside lists for correct toggling
+            bars_forward = ax.bar(x - width / 2, forward_counts, width=width, label="Forward Packets",
+                                  color="royalblue", edgecolor="black")
+            bars_backward = ax.bar(x + width / 2, backward_counts, width=width, label="Backward Packets",
+                                   color="tomato", edgecolor="black")
 
-        # ✅ Create bars with label references
-        bars_forward = ax.bar(x - width / 2, forward_counts, width=width, label="Forward Packets", color="royalblue",
-                              edgecolor="black")
-        bars_backward = ax.bar(x + width / 2, backward_counts, width=width, label="Backward Packets", color="tomato",
-                               edgecolor="black")
+            ax.set_xticks(x)
+            ax.set_xticklabels(pcap_files, rotation=45, ha="right")
+            ax.set_xlabel("PCAP Files")
+            ax.set_ylabel("Packet Count")
+            ax.set_title("Forward vs Backward Packets per PCAP")
 
-        ax.set_xticks(x)
-        ax.set_xticklabels(pcap_files, rotation=45, ha="right")
-        ax.set_xlabel("PCAP Files")
-        ax.set_ylabel("Packet Count")
-        ax.set_title("Forward vs Backward Packets per PCAP")
-
-        legend = ax.legend(loc="upper right", frameon=True)
-        legend.set_draggable(True)
-        ax.grid(axis="y", linestyle="--", alpha=0.7)
+            legend = ax.legend(loc="upper right", frameon=True)
+            legend.set_draggable(True)
+            ax.grid(axis="y", linestyle="--", alpha=0.7)
 
         self.display_graph(fig)
 
-        # ✅ Store CheckButtons in `self` to prevent garbage collection
-        if not hasattr(self, "checkbox_widgets"):
-            self.checkbox_widgets = {}
+        # ✅ Store bars in a dictionary for reference
+        self.bar_references = {
+            "Forward": bars_forward,
+            "Backward": bars_backward,
+        }
 
-        # ✅ Create a well-placed checkbox box (Semi-transparent, Positioned Bottom-Right)
-        check_ax = fig.add_axes([0.75, 0.05, 0.22, 0.3], facecolor=(1, 1, 1, 0.7),
-                                frameon=True)  # 🔥 Adjusted position & alpha
-        check_ax.set_xticks([])
-        check_ax.set_yticks([])
-        check_ax.text(0.05, 1.05, "Toggle Visibility", fontsize=10, fontweight="bold")
+        # ✅ Callback function for toggling visibility
+        def toggle_visibility(_=None):
+            """Toggle visibility of Forward/Backward bars and individual PCAP bars."""
+            forward_visible = self.check_vars["Forward"].get()
+            backward_visible = self.check_vars["Backward"].get()
 
-        # ✅ Define checkboxes for Forward/Backward Packets + PCAPs
-        check_labels = ["Forward", "Backward"] + pcap_files
-        visibility = [True] * len(check_labels)
+            # ✅ Toggle Forward and Backward bars visibility
+            for bar in bars_forward:
+                bar.set_visible(forward_visible)
+            for bar in bars_backward:
+                bar.set_visible(backward_visible)
 
-        self.checkbox_widgets["flow_dir"] = CheckButtons(check_ax, check_labels, visibility)
-
-        def toggle_visibility(label):
-            """Toggle visibility of Forward/Backward bars and PCAP bars."""
-            if label == "Forward":
-                for bar in bars_forward:
-                    bar.set_visible(not bar.get_visible())
-            elif label == "Backward":
-                for bar in bars_backward:
-                    bar.set_visible(not bar.get_visible())
-            elif label in pcap_files:  # Handle per-PCAP visibility
-                idx = pcap_files.index(label)
-                bars_forward[idx].set_visible(not bars_forward[idx].get_visible())
-                bars_backward[idx].set_visible(not bars_backward[idx].get_visible())
+            # ✅ Toggle PCAP-specific bars
+            for pcap, var in self.check_vars.items():
+                if pcap in pcap_files:
+                    index = pcap_files.index(pcap)
+                    bars_forward[index].set_visible(var.get() and forward_visible)
+                    bars_backward[index].set_visible(var.get() and backward_visible)
 
             fig.canvas.draw_idle()
 
-        self.checkbox_widgets["flow_dir"].on_clicked(toggle_visibility)
+        # ✅ Create UI using `create_control_frame`
+        self.create_control_frame(
+            title="Flow Direction Controls",
+            check_options=["Forward", "Backward"] + pcap_files,
+            check_callback=toggle_visibility
+        )
 
+        # ✅ Ensure visibility is correctly set at the start
+        toggle_visibility()
 
     def plot_burstiness(self):
-        """ Displays burstiness factors (PMR, MMR, CV) with radio buttons & PCAP checkboxes inside the graph. """
+        """ Displays a graph of burstiness factors (PMR, MMR, CV) with Tkinter radio buttons and checkboxes below. """
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
 
@@ -278,15 +320,18 @@ class Graphs(tk.Toplevel):
         color_map = plt.get_cmap("tab10")
         pcap_colors = {pcap: color_map(i) for i, pcap in enumerate(unique_pcaps)}
 
-        values = pmr_values
-        max_value = max(values) * 1.1
+        # ✅ Default selection
+        selected_factor = "PMR"
+        factor_values = {"PMR": pmr_values, "MMR": mmr_values, "CV": cv_values}
+        values = factor_values[selected_factor]
+
+        max_value = max(values) * 1.1 if values.any() else 1
         y_ticks = np.linspace(0, max_value, 5)
 
         bars = ax.bar(pcap_files, values, color=[pcap_colors[pcap] for pcap in pcap_files])
         ax.set_ylabel("Burstiness Value")
         ax.set_xlabel("PCAP Files")
         ax.set_title("Burstiness Factors (PMR, MMR, CV)")
-        ax.set_xticklabels(pcap_files, rotation=45, ha="right")
         ax.set_ylim(0, max_value)
         ax.set_yticks(y_ticks)
 
@@ -297,50 +342,110 @@ class Graphs(tk.Toplevel):
 
         self.display_graph(fig)
 
-        # ✅ Place radio buttons and checkboxes inside the graph
-        radio_ax = fig.add_axes([0.8, 0.25, 0.18, 0.25], facecolor="lightgray")  # Box inside graph
-        radio_ax.set_xticks([])
-        radio_ax.set_yticks([])
-        radio_ax.set_frame_on(True)
+        # ✅ Callback function for updating the graph based on the selected burstiness factor
+        def update_plot():
+            selected_factor = self.radio_var.get()
+            new_values = factor_values[selected_factor]
 
-        # ✅ Radio Buttons for PMR/MMR/CV
-        radio_ax.text(0.05, 0.9, "Burstiness", fontsize=10, fontweight="bold")
-        self.burstiness_var = plt.axes([0.82, 0.75, 0.12, 0.12])
-        self.radio_buttons = RadioButtons(self.burstiness_var, ["PMR", "MMR", "CV"], active=0)
-
-        def update_plot(label):
-            """ Update the bar graph based on selected burstiness metric. """
-            nonlocal values, max_value, y_ticks
-
-            values = {"PMR": pmr_values, "MMR": mmr_values, "CV": cv_values}[label]
-
-            max_value = max(values) * 1.1
+            max_value = max(new_values) * 1.1 if new_values.any() else 1
             y_ticks = np.linspace(0, max_value, 5)
 
-            for bar, value in zip(bars, values):
+            for bar, value in zip(bars, new_values):
                 bar.set_height(value)
 
             ax.set_ylim(0, max_value)
             ax.set_yticks(y_ticks)
             fig.canvas.draw_idle()
 
-        self.radio_buttons.on_clicked(update_plot)
+        # ✅ Callback function for toggling PCAP visibility
+        def toggle_visibility(_=None):
+            for pcap, var in self.check_vars.items():
+                index = unique_pcaps.index(pcap)
+                bars[index].set_visible(var.get())
+            fig.canvas.draw_idle()
 
-        # ✅ PCAP Checkboxes
-        check_positions = np.linspace(0.6, 0.05, len(pcap_files))
-        self.pcap_checkboxes = []
+        # ✅ Create UI using `create_control_frame`
+        self.create_control_frame(
+            title="Burstiness Controls",
+            radio_options=["PMR", "MMR", "CV"],
+            check_options=unique_pcaps,
+            radio_callback=update_plot,
+            check_callback=toggle_visibility
+        )
 
-        for pcap, pos in zip(pcap_files, check_positions):
-            cb = plt.axes([0.82, pos, 0.12, 0.03])
-            check = CheckButtons(cb, [pcap], [True])
+        # ✅ Set default selection and update plot
+        self.radio_var.set(selected_factor)
+        update_plot()
 
-            def toggle_pcap_visibility(label=pcap):
-                idx = pcap_files.index(label)
-                bars[idx].set_visible(not bars[idx].get_visible())
-                fig.canvas.draw_idle()
+    def create_control_frame(self, title, check_options=None, check_callback=None, radio_options=None,
+                             radio_callback=None):
+        """Creates a Tkinter frame below the graph with checkboxes and radio buttons (if provided)."""
 
-            check.on_clicked(toggle_pcap_visibility)
-            self.pcap_checkboxes.append(check)
+        print(f"Creating control frame: {title}")  # ✅ Debugging Statement
+
+        # ✅ Destroy old frame before creating a new one
+        if hasattr(self, "checkbox_frame") and self.checkbox_frame:
+            self.checkbox_frame.destroy()
+
+        # ✅ Attach control frame to `self.graph_frame` instead of `self.master`
+        self.checkbox_frame = tk.Frame(self.graph_frame, bg="white")
+        self.checkbox_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+        tk.Label(self.checkbox_frame, text=title, font=("Arial", 10, "bold"), bg="white").pack()
+
+        self.check_vars = {}  # ✅ Store BooleanVars for checkboxes
+        if not hasattr(self, "radio_var"):  # ✅ Ensure `radio_var` exists
+            self.radio_var = tk.StringVar()
+
+        control_wrapper = tk.Frame(self.checkbox_frame, bg="white")
+        control_wrapper.pack(fill=tk.X)
+
+        # ✅ Radio Button Section (Horizontal Layout)
+        if radio_options:
+            if not self.radio_var.get():
+                self.radio_var.set(radio_options[0])
+
+            radio_frame = tk.Frame(control_wrapper, bg="white")
+            radio_frame.grid(row=0, column=0, sticky="w", padx=5)
+
+            tk.Label(radio_frame, text="Select Option:", font=("Arial", 9, "bold"), bg="white").grid(row=0, column=0,
+                                                                                                     sticky="w")
+
+            max_columns = 5  # ✅ Adjust column limit before wrapping
+            row, col = 1, 0
+
+            for option in radio_options:
+                rb = tk.Radiobutton(radio_frame, text=option, variable=self.radio_var, value=option,
+                                    command=radio_callback, bg="white", anchor="w", wraplength=150)
+                rb.grid(row=row, column=col, padx=5, pady=2, sticky="w")
+                col += 1
+                if col >= max_columns:  # ✅ Move to next row if column limit reached
+                    col = 0
+                    row += 1
+
+        # ✅ Checkbox Section (Wraps automatically)
+        if check_options:
+            check_frame = tk.Frame(control_wrapper, bg="white")
+            check_frame.grid(row=1, column=0, sticky="w", padx=5)
+
+            tk.Label(check_frame, text="Toggle Visibility:", font=("Arial", 9, "bold"), bg="white").grid(row=0,
+                                                                                                         column=0,
+                                                                                                         sticky="w")
+
+            max_columns = 5
+            row, col = 1, 0
+
+            for option in check_options:
+                var = tk.BooleanVar(value=True)
+                self.check_vars[option] = var
+
+                cb = tk.Checkbutton(check_frame, text=option, variable=var, command=check_callback, bg="white",
+                                    anchor="w", wraplength=150)
+                cb.grid(row=row, column=col, padx=5, pady=2, sticky="w")
+                col += 1
+                if col >= max_columns:
+                    col = 0
+                    row += 1
 
     def plot_http_distribution(self):
         self.plot_category_graph("Http Count", "HTTP Distribution")
@@ -349,32 +454,28 @@ class Graphs(tk.Toplevel):
         """Plots bytes transferred per second for each PCAP file over time with toggleable checkboxes."""
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
+        if hasattr(self, "checkbox_frame") and self.checkbox_frame is not None:
+            self.checkbox_frame.destroy()
 
         fig, ax = plt.subplots(figsize=(12, 6))
-
         bytes_per_second_per_pcap = {}
         pcap_lines = {}
 
-        # Process data per PCAP
         for entry in self.data:
             pcap_file = entry["Pcap file"]
             timestamps = entry.get("Packet Timestamps", [])
             packet_sizes = entry.get("Packet Sizes", [])
 
             if not timestamps or not packet_sizes:
-                continue  # Skip empty or invalid data
+                continue
 
-            # Normalize timestamps to start at 0
             start_time = min(timestamps)
             relative_times = [t - start_time for t in timestamps]
-
-            # Define time bins (1-second intervals)
             bins = np.arange(0, max(relative_times) + 1, 1)
             byte_counts, _ = np.histogram(relative_times, bins=bins, weights=packet_sizes)
 
             bytes_per_second_per_pcap[pcap_file] = (bins[:-1], byte_counts)
 
-        # Assign colors to each PCAP
         colors = plt.get_cmap("tab10")
 
         for i, (pcap_file, (time_bins, byte_counts)) in enumerate(bytes_per_second_per_pcap.items()):
@@ -386,33 +487,31 @@ class Graphs(tk.Toplevel):
         ax.set_title("Bytes Transferred Per Second Over Time for Each PCAP")
         ax.grid(True)
 
-        # ✅ Apply the semi-transparent check button box (Bottom-Right)
-        check_ax = fig.add_axes([0.75, 0.05, 0.22, 0.3], facecolor=(1, 1, 1, 0.7), frameon=True)
-        check_ax.set_xticks([])
-        check_ax.set_yticks([])
-        check_ax.text(0.05, 1.05, "Toggle Visibility", fontsize=10, fontweight="bold")
-
-        check_labels = list(pcap_lines.keys())
-        visibility = [True] * len(check_labels)
-
-        # ✅ Store checkboxes persistently
-        if not hasattr(self, "checkbox_widgets"):
-            self.checkbox_widgets = {}
-
-        self.checkbox_widgets["bytes_per_second"] = CheckButtons(check_ax, check_labels, visibility)
-
-        def toggle_visibility(label):
-            line = pcap_lines[label]
-            line.set_visible(not line.get_visible())
-            fig.canvas.draw_idle()
-
-        self.checkbox_widgets["bytes_per_second"].on_clicked(toggle_visibility)
-
-        # ✅ Ensure legend is draggable
         legend = ax.legend(loc="upper right", frameon=True)
         legend.set_draggable(True)
 
         self.display_graph(fig)
+
+        # ✅ Tkinter Checkbutton Frame BELOW the graph
+        self.checkbox_frame = tk.Frame(self.graph_frame, bg="white", relief=tk.RIDGE, bd=2)
+        self.checkbox_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+
+        tk.Label(self.checkbox_frame, text="Toggle Visibility:", bg="white", font=("Arial", 10, "bold")).pack(
+            side=tk.LEFT, padx=5)
+
+        self.pcap_visibility = {}
+
+        def toggle_visibility():
+            """ Toggle visibility of each PCAP. """
+            for pcap, var in self.pcap_visibility.items():
+                pcap_lines[pcap].set_visible(var.get())
+            fig.canvas.draw_idle()
+
+        for label in pcap_lines.keys():
+            var = tk.BooleanVar(value=True)
+            cb = tk.Checkbutton(self.checkbox_frame, text=label, variable=var, command=toggle_visibility, bg="white")
+            cb.pack(side=tk.LEFT, padx=5)
+            self.pcap_visibility[label] = var
 
     # ==============================
     # ✅ HELPER FUNCTIONS
@@ -427,15 +526,13 @@ class Graphs(tk.Toplevel):
         legend.set_draggable(True)
 
     from matplotlib.widgets import CheckButtons
-
     def plot_bar_chart(self, x_labels, values, ylabel, title):
-        """Generalized bar graph with checkboxes for toggling visibility."""
+        """Generalized bar graph with Tkinter checkboxes below the graph."""
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
 
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        # Assign colors
         unique_pcaps = list(set(x_labels))
         color_map = plt.get_cmap("tab10")
         pcap_colors = {pcap: color_map(i % 10) for i, pcap in enumerate(unique_pcaps)}
@@ -447,42 +544,33 @@ class Graphs(tk.Toplevel):
         ax.set_title(title)
         ax.tick_params(axis='x', rotation=45)
 
-        # ✅ Apply the semi-transparent check button box (Bottom-Right)
-        check_ax = fig.add_axes([0.75, 0.05, 0.22, 0.3], facecolor=(1, 1, 1, 0.7), frameon=True)
-        check_ax.set_xticks([])
-        check_ax.set_yticks([])
-        check_ax.text(0.05, 1.05, "Toggle Visibility", fontsize=10, fontweight="bold")
-
-        # ✅ Store checkboxes persistently
-        if not hasattr(self, "checkbox_widgets"):
-            self.checkbox_widgets = {}
-
-        self.checkbox_widgets["bar_chart"] = CheckButtons(check_ax, unique_pcaps, [True] * len(unique_pcaps))
-
-        def toggle_bar_visibility(label):
-            index = unique_pcaps.index(label)
-            bars[index].set_visible(not bars[index].get_visible())
-            fig.canvas.draw_idle()
-
-        self.checkbox_widgets["bar_chart"].on_clicked(toggle_bar_visibility)
-
         self.add_draggable_legend(ax, pcap_colors, unique_pcaps)
         self.display_graph(fig)
 
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from collections import Counter
-    from matplotlib.widgets import CheckButtons
+        # ✅ Create UI using `create_control_frame`
+        def toggle_visibility(_=None):
+            """ Toggle visibility of each PCAP. """
+            for pcap, var in self.check_vars.items():
+                index = unique_pcaps.index(pcap)
+                bars[index].set_visible(var.get())
+            fig.canvas.draw_idle()
+
+        # ✅ Ensure checkboxes are created before setting values
+        self.create_control_frame(
+            title=f"{title} Controls",
+            check_options=unique_pcaps,
+            check_callback=toggle_visibility
+        )
 
     def plot_category_graph(self, column_name, ylabel):
-        """Generalized category-based bar graph with checkboxes to toggle visibility."""
+        """Generalized category-based bar graph with Tkinter checkboxes below the graph."""
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
 
         fig, ax = plt.subplots(figsize=(10, 6))
         category_per_pcap = {}
 
-        # ✅ Process categories from data
+        # Process categories from data
         for entry in self.data:
             pcap_file = entry["Pcap file"]
             category_per_pcap[pcap_file] = Counter()
@@ -496,8 +584,8 @@ class Graphs(tk.Toplevel):
 
         x = np.arange(len(categories)) * 2
         width = 0.2
+        bars_dict = {}
 
-        bars_dict = {}  # Store bars for toggling
         for i, (pcap_file, category_counts) in enumerate(category_per_pcap.items()):
             y = [category_counts.get(category, 0) for category in categories]
             bars_dict[pcap_file] = ax.bar(x + (i * width) - (num_pcaps * width / 2), y, width=width, label=pcap_file)
@@ -508,33 +596,24 @@ class Graphs(tk.Toplevel):
         ax.set_ylabel(ylabel)
         ax.set_title(ylabel)
 
-        # ✅ Apply the semi-transparent check button box (Bottom-Right)
-        check_ax = fig.add_axes([0.75, 0.05, 0.22, 0.3], facecolor=(1, 1, 1, 0.7), frameon=True)
-        check_ax.set_xticks([])
-        check_ax.set_yticks([])
-        check_ax.text(0.05, 1.05, "Toggle Visibility", fontsize=10, fontweight="bold")
-
-        check_labels = list(bars_dict.keys())
-        visibility = [True] * len(check_labels)
-
-        # ✅ Store checkboxes in `self` to prevent garbage collection
-        if not hasattr(self, "checkbox_widgets"):
-            self.checkbox_widgets = {}
-
-        self.checkbox_widgets["category_graph"] = CheckButtons(check_ax, check_labels, visibility)
-
-        def toggle_category_visibility(label):
-            for bar in bars_dict[label]:
-                bar.set_visible(not bar.get_visible())
-            fig.canvas.draw_idle()
-
-        self.checkbox_widgets["category_graph"].on_clicked(toggle_category_visibility)
-
-        # ✅ Make the legend draggable
         legend = ax.legend(loc="upper right", frameon=True)
         legend.set_draggable(True)
 
         self.display_graph(fig)
+
+        # ✅ Create UI using `create_control_frame`
+        def toggle_visibility(_=None):
+            """ Toggle visibility of each PCAP. """
+            for pcap, var in self.check_vars.items():
+                for bar in bars_dict[pcap]:
+                    bar.set_visible(var.get())
+            fig.canvas.draw_idle()
+
+        self.create_control_frame(
+            title=f"{ylabel} Controls",
+            check_options=list(bars_dict.keys()),
+            check_callback=toggle_visibility
+        )
 
     def display_graph(self, fig):
         if self.canvas:
