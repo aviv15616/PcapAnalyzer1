@@ -382,15 +382,14 @@ class Graph(tk.Toplevel):
 
         legend.set_draggable(True)
 
-    from matplotlib.widgets import CheckButtons
     def plot_bar_chart(self, x_labels, values, ylabel, title):
-        """Generalized bar graph with Tkinter checkboxes below the graph."""
+        """Generalized bar graph with Tkinter checkboxes to toggle PCAP visibility correctly."""
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
 
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        unique_pcaps = list(set(x_labels))
+        unique_pcaps = list(set(x_labels))  # Unique PCAP names
         color_map = plt.get_cmap("tab10")
         pcap_colors = {pcap: color_map(i % 10) for i, pcap in enumerate(unique_pcaps)}
 
@@ -404,20 +403,28 @@ class Graph(tk.Toplevel):
         self.add_draggable_legend(ax, pcap_colors, unique_pcaps)
         self.display_graph(fig)
 
-        # ✅ Create UI using `create_control_frame`
-        def toggle_visibility(_=None):
-            """ Toggle visibility of each PCAP. """
+        # ✅ **Create a mapping of PCAP names to bars**
+        self.pcap_bar_map = {x_labels[i]: bars[i] for i in range(len(x_labels))}
+
+        # ✅ **Modify update function to reference the actual PCAP name**
+        def update_visibility():
+            """ Toggle visibility based on selected checkboxes. """
             for pcap, var in self.check_vars.items():
-                index = unique_pcaps.index(pcap)
-                bars[index].set_visible(var.get())
+                if pcap in self.pcap_bar_map:
+                    self.pcap_bar_map[pcap].set_visible(var.get())  # ✅ Correct mapping
             fig.canvas.draw_idle()
 
-        # ✅ Ensure checkboxes are created before setting values
+        # ✅ Create UI using `create_control_frame`
         self.create_control_frame(
             title=f"{title} Controls",
-            check_options=unique_pcaps,
-            check_callback=toggle_visibility
+            check_options=unique_pcaps,  # Ensure correct PCAP names are used
+            check_callback=update_visibility  # Callback to toggle bars
         )
+
+        # ✅ Ensure all checkboxes are initially set to visible
+        for var in self.check_vars.values():
+            var.set(True)
+        update_visibility()  # Apply visibility settings
 
     def plot_category_graph(self, column_name, ylabel):
         """Generalized category-based bar graph with Tkinter checkboxes below the graph."""
