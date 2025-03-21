@@ -121,10 +121,7 @@ class PcapProcessor:
 
         flow_directionality_ratio = round(total_forward / total_backward, 3) if total_backward > 0 else total_forward
 
-        # ✅ **Compute Burstiness Factors**
-        pmr_value = self.calculate_pmr(packet_sizes, iat_list)
-        mmr_value = self.calculate_mmr(packet_sizes, timestamps_list)
-        cv_value = self.calculate_cv(iat_list)
+
 
         self.pcap_data.append({
             "Pcap file": file_name,
@@ -141,44 +138,11 @@ class PcapProcessor:
             "Http Count": " ".join([f"{k}-{v}" for k, v in http_counter.items()]) or "0",
             "Tcp Flags": " ".join([f"{k}-{v}" for k, v in tcp_flags.items()]) or "N/A",
             "Ip protocols": " ".join([f"{k}-{v}" for k, v in ip_protocols.items()]) or "N/A",
-            "PMR": round(pmr_value, 2),
-            "MMR": round(mmr_value, 2),
-            "CV": round(cv_value, 2),
         })
 
         return True
 
-    def calculate_pmr(self, packet_sizes, iat_list):
-        if not packet_sizes or not iat_list:
-            return 0
 
-        packet_sizes = packet_sizes[:len(iat_list)]
-        iat_array = np.array(iat_list)
-        packet_sizes_array = np.array(packet_sizes)
-        iat_array[iat_array <= 0] = 1e-6
-        throughput = packet_sizes_array / iat_array
-
-        mean_throughput = np.mean(throughput)
-        if mean_throughput == 0:
-            return 0
-
-        return np.nan_to_num(np.max(throughput) / mean_throughput, nan=0)
-
-    def calculate_mmr(self, packet_sizes, timestamps):
-        if not packet_sizes or not timestamps:
-            return 0.0
-        time_windows = {}
-        for size, ts in zip(packet_sizes, timestamps):
-            window = int(ts)
-            time_windows[window] = time_windows.get(window, 0) + size
-        max_rate = max(time_windows.values()) if time_windows else 0
-        mean_rate = np.mean(list(time_windows.values())) if time_windows else 0
-        return max_rate / mean_rate if mean_rate > 0 else 0.0
-
-    def calculate_cv(self, iat_list):
-        if len(iat_list) < 2:
-            return 0.0
-        return np.std(iat_list) / np.mean(iat_list) if np.mean(iat_list) > 0 else 0.0
 
     def show_message(self, message):
         root = tk.Tk()

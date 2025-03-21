@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from data_frame import DataFrameWindow
 from pcap_processor import PcapProcessor
-from graphs import Graphs
+from graph import Graph
 import os
 import threading
 
@@ -43,7 +43,7 @@ class PcapGUI:
             return  # ✅ Prevent file selection if limit is reached
 
         files = filedialog.askopenfilenames(
-            filetypes=[("PCAP Files", "*.pcap")],
+            filetypes=[("PCAP Files", "*.pcap;*.pcapng"), ("All Files", "*.*")],
             title=f"Select up to {remaining_slots} more PCAP files"
         )
 
@@ -104,10 +104,15 @@ class PcapGUI:
             return
 
         if not self.graph_window or not self.graph_window.winfo_exists():
-            self.graph_window = Graphs(self.root, self.processor.pcap_data)
+            self.graph_window = Graph(self.root, self.processor.pcap_data)
             self.graph_window.state("zoomed")  # ✅ Maximized window with controls
         else:
             self.graph_window.focus()
+        # ==============================
+        # ✅ HELPER FUNCTIONS
+        # ==============================
+
+
 
 
 

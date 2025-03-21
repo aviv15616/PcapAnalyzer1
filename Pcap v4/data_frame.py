@@ -21,9 +21,6 @@ class DataFrameWindow(tk.Toplevel):
             "Http Count": "Number of HTTP packets categorized by version.",
             "Tcp Flags": "Count of TCP flags (SYN, ACK, RST, PSH, FIN).",
             "Ip protocols": "Count of different IP protocols used in packets.",
-            "PMR": "Peak-to-Mean Ratio: Measures traffic burstiness by comparing peak throughput to mean throughput.",
-            "MMR": "Max/Mean Rate: Compares peak transmission rate to average rate over time.",
-            "CV": "Coefficient of Variation: Measures inter-packet timing variability.",
         }
 
         self.tree = ttk.Treeview(self, columns=list(self.column_descriptions.keys()), show='headings')
